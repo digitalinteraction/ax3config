@@ -8,6 +8,10 @@ import android.hardware.usb.UsbInterface;
 import android.hardware.usb.UsbManager;
 
 import java.io.IOException;
+import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
+import java.util.LinkedList;
+import java.util.List;
 
 public class UsbSerialPort {
 
@@ -131,7 +135,7 @@ public class UsbSerialPort {
         return connection.getSerial();
     }
 
-    // Read bytes into the buffer
+    // Read bytes
     public int read(byte[] buffer, int timeoutMS) {
         // bulkTransfer does not support an offset, so use a local buffer
         byte[] readBuffer = new byte[1024];
@@ -149,7 +153,7 @@ public class UsbSerialPort {
         return offset;
     }
 
-    // Write bytes from the buffer
+    // Write bytes
     public int write(byte[] buffer, int timeoutMS) {
         // bulkTransfer does not support an offset, so use a local buffer
         byte[] writeBuffer = new byte[1024];
@@ -165,6 +169,55 @@ public class UsbSerialPort {
             offset += numWritten;
         }
         return offset;
+    }
+
+    /*
+    // Read line
+    public String readLine(int timeoutMS) {
+        StringBuilder sb = new StringBuilder();
+        byte[] buffer = new byte[1];
+        for (;;) {
+            int count = read(buffer, timeoutMS);
+            if (count <= 0) { break; }
+            char c = (char)buffer[0];
+            if (c == '\n') {
+                if (sb.length() > 0 && sb.charAt(sb.length() - 1) == '\r') {
+                    sb.deleteCharAt(sb.length() - 1);
+                }
+                break;
+            }
+            sb.append(c);
+        }
+        return sb.toString();
+    }
+    */
+
+    // Read string
+    public String readString(int numBytes, int timeoutMS) {
+        byte[] buffer = new byte[numBytes];
+        int count = read(buffer, timeoutMS);
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < count; i++) {
+            char c = (char)buffer[i];
+            /*
+            if (c == '\n') {
+                if (sb.length() > 0 && sb.charAt(sb.length() - 1) == '\r') {
+                    sb.deleteCharAt(sb.length() - 1);
+                }
+                break;
+            }
+            */
+            sb.append(c);
+        }
+        return sb.toString();
+    }
+
+
+    // Write string
+    public boolean writeString(String str, int timeoutMS) {
+        byte[] outBuffer = str.getBytes(Charset.forName("UTF-8"));
+        int numBytesWritten = write(outBuffer, timeoutMS);
+        return numBytesWritten == outBuffer.length;
     }
 
     @Override

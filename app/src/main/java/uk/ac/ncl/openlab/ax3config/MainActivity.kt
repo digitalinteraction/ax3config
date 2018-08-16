@@ -53,23 +53,19 @@ class MainActivity : AppCompatActivity() {
 
             val outString = editTextInput.text
             log(">>> $outString")
-            val outBuffer = "$outString\r\n".toByteArray()
-            val numBytesWritten = port.write(outBuffer, 2000)
-            log("WRITTEN: $numBytesWritten")
+            val written = port.writeString("$outString\r\n", 2000)
+            log("WRITTEN: $written")
 
-            val inBuffer = ByteArray(256)
-            val numBytesRead = port.read(inBuffer, 2000)
-            log("READ: $numBytesRead")
-            val inString = String(inBuffer, 0, numBytesRead).trim()
+            val inString = port.readString(256, 2000);
             log("<<< $inString")
 
 
         } catch (e: IOException) {
             // Deal with error.
-            log("IO EXCEPTION")
+            log("IO EXCEPTION: ${e.message}")
         } catch (e: Exception) {
             // Deal with error.
-            log("EXCEPTION ${e.message}")
+            log("EXCEPTION: ${e.message}")
         } finally {
             log("Closing...")
             port.close()
