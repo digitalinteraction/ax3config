@@ -56,10 +56,11 @@ class MainActivity : AppCompatActivity() {
             val written = port.writeString("$outString\r\n", 2000)
             log("WRITTEN: $written")
 
-            val inString = port.readString(256, 2000);
-            log("<<< $inString")
-
-
+            val lines = port.readLines(200, false)
+            log("READ: ${lines.size}")
+            for (line in lines) {
+                log("<<< $line")
+            }
         } catch (e: IOException) {
             // Deal with error.
             log("IO EXCEPTION: ${e.message}")
@@ -87,23 +88,19 @@ class MainActivity : AppCompatActivity() {
         usbManager = getSystemService(Context.USB_SERVICE) as UsbManager
 
         // button is the Button id
-        buttonList.setOnClickListener {
-            log("LIST:")
-            var usbDevice: UsbDevice? = UsbSerialPort.findFirstDevice(usbManager);
+        buttonSend.setOnClickListener {
+            val text = editTextInput.text
+            log("SEND: $text")
+            var usbDevices = UsbSerialPort.getDevices(usbManager);
             // Find device from attached devices
-            if (usbDevice == null) {
-                log("(no device)")
-            } else {
-                log("DEVICE: ${usbDevice}")
+            log("(${usbDevices.size} devices)")
+            if (usbDevices.size > 0) {
+                var usbDevice = usbDevices[0];
+                // log("DEVICE: ${usbDevice.manufacturerName} // ${usbDevice.productName} // ${usbDevice.serialNumber}")
+                log("DEVICE: Requesting permission...")
                 usbManager.requestPermission(usbDevice, permissionIntent)
             }
             log("---")
-        }
-
-        // button is the Button id
-        buttonSend.setOnClickListener {
-            val text = editTextInput.text
-            log(">>> $text")
         }
     }
 }

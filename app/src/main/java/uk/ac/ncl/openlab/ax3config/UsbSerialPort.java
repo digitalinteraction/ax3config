@@ -10,6 +10,7 @@ import android.hardware.usb.UsbManager;
 import java.io.IOException;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
 
@@ -32,13 +33,14 @@ public class UsbSerialPort {
 
 
     // Find the first device present
-    public static UsbDevice findFirstDevice(UsbManager usbManager) {
+    public static UsbDevice[] getDevices(UsbManager usbManager) {
+        List<UsbDevice> devices = new ArrayList<UsbDevice>();
         for (UsbDevice usbDevice : usbManager.getDeviceList().values()) {
             if (UsbSerialPort.isDevice(usbDevice)) {
-                return usbDevice;
+                devices.add(usbDevice);
             }
         }
-        return null;
+        return devices.toArray(new UsbDevice[0]);
     }
 
     // Determines whether a UsbDevice is the correct VID/PID
@@ -137,60 +139,83 @@ public class UsbSerialPort {
 
     // Read bytes
     public int read(byte[] buffer, int timeoutMS) {
-        // bulkTransfer does not support an offset, so use a local buffer
-        byte[] readBuffer = new byte[1024];
+        return read(buffer, timeoutMS, false);
+    }
+    public int read(byte[] buffer, int timeoutMS, boolean single) {
+        // UsbConnection.bulkTransfer() before JELLY_BEAN_MR2 does not support an offset, so use a local buffer
+        byte[] readBuffer = null;
         int offset = 0;
         while (offset < buffer.length) {
             int toRead = buffer.length - offset;
-            if (toRead > readBuffer.length) {
-                toRead = readBuffer.length;
+            int numRead;
+            if (offset == 0) {
+                numRead = connection.bulkTransfer(endpointRead, buffer, toRead, timeoutMS);
+            } else {
+                if (readBuffer == null || readBuffer.length < toRead) {
+                    readBuffer = new byte[toRead];
+                }
+                numRead = connection.bulkTransfer(endpointRead, readBuffer, toRead, timeoutMS);
+                if (numRead > 0) {
+                    System.arraycopy(readBuffer, 0, buffer, offset, numRead);
+                }
             }
-            int numRead = connection.bulkTransfer(endpointRead, readBuffer, toRead, timeoutMS);
-            if (numRead < 0) { break; }
-            System.arraycopy(readBuffer, 0, buffer, offset, numRead);
+            if (numRead <= 0) { break; }
             offset += numRead;
+            if (single) {
+                break;
+            }
         }
         return offset;
     }
 
     // Write bytes
     public int write(byte[] buffer, int timeoutMS) {
-        // bulkTransfer does not support an offset, so use a local buffer
-        byte[] writeBuffer = new byte[1024];
+        // UsbConnection.bulkTransfer() before JELLY_BEAN_MR2 does not support an offset, so use a local buffer
+        byte[] writeBuffer = null;
         int offset = 0;
         while (offset < buffer.length) {
             int toWrite = buffer.length - offset;
-            if (toWrite > writeBuffer.length) {
-                toWrite = writeBuffer.length;
+            int numWritten;
+            if (offset == 0) {
+                numWritten = connection.bulkTransfer(endpointWrite, buffer, toWrite, timeoutMS);
+            } else {
+                if (writeBuffer == null || writeBuffer.length < toWrite) {
+                    writeBuffer = new byte[toWrite];
+                }
+                System.arraycopy(buffer, offset, writeBuffer, 0, toWrite);
+                numWritten = connection.bulkTransfer(endpointWrite, writeBuffer, toWrite, timeoutMS);
             }
-            System.arraycopy(buffer, offset, writeBuffer, 0, toWrite);
-            int numWritten = connection.bulkTransfer(endpointWrite, writeBuffer, toWrite, timeoutMS);
-            if (numWritten < 0) { break; }
+            if (numWritten <= 0) { break; }
             offset += numWritten;
         }
         return offset;
     }
 
-    /*
-    // Read line
-    public String readLine(int timeoutMS) {
-        StringBuilder sb = new StringBuilder();
-        byte[] buffer = new byte[1];
+    // Read line (note: any partially-written line is lost, but should only happen if device outgoing buffer was full)
+    StringBuilder sb = new StringBuilder();
+    public String[] readLines(int timeoutMS, boolean single) {
+        byte[] buffer = new byte[64];
+        List<String> lines = new ArrayList<String>();
         for (;;) {
-            int count = read(buffer, timeoutMS);
-            if (count <= 0) { break; }
-            char c = (char)buffer[0];
-            if (c == '\n') {
-                if (sb.length() > 0 && sb.charAt(sb.length() - 1) == '\r') {
-                    sb.deleteCharAt(sb.length() - 1);
+            int count = read(buffer, timeoutMS, single); // blocking wait for next read (or timeout)
+            // parse as characters, line-by-line
+            for (int i = 0; i < count; i++) {
+                char c = (char) buffer[i];
+                if (c == '\n') {
+                    if (sb.length() > 0 && sb.charAt(sb.length() - 1) == '\r') {
+                        sb.deleteCharAt(sb.length() - 1);
+                    }
+                    lines.add(sb.toString());
+                    sb.delete(0, sb.length());
+                } else {
+                    sb.append(c);
                 }
-                break;
             }
-            sb.append(c);
+            // return if last read was partial
+            if (count < buffer.length) { break; }
         }
-        return sb.toString();
+        return lines.toArray(new String[0]);
     }
-    */
 
     // Read string
     public String readString(int numBytes, int timeoutMS) {
@@ -199,14 +224,6 @@ public class UsbSerialPort {
         StringBuilder sb = new StringBuilder();
         for (int i = 0; i < count; i++) {
             char c = (char)buffer[i];
-            /*
-            if (c == '\n') {
-                if (sb.length() > 0 && sb.charAt(sb.length() - 1) == '\r') {
-                    sb.deleteCharAt(sb.length() - 1);
-                }
-                break;
-            }
-            */
             sb.append(c);
         }
         return sb.toString();
