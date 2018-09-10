@@ -39,9 +39,15 @@ import kotlinx.android.synthetic.main.activity_main.*
 import java.io.IOException
 import android.content.IntentFilter
 import android.hardware.usb.UsbDevice
+import android.view.inputmethod.EditorInfo
+import android.content.pm.PackageManager.FEATURE_USB_HOST
+import java.util.Calendar
+
 
 private const val ACTION_USB_PERMISSION = "com.android.example.USB_PERMISSION"
 
+
+// TODO: Config on an IntentService
 
 class MainActivity : AppCompatActivity() {
 
@@ -60,7 +66,7 @@ class MainActivity : AppCompatActivity() {
                     val device: UsbDevice? = intent.getParcelableExtra(UsbManager.EXTRA_DEVICE)
                     if (intent.getBooleanExtra(UsbManager.EXTRA_PERMISSION_GRANTED, false)) {
                         device?.apply {
-                            log("Permission allowed -- setting up device communication...")
+                            log("Permission allowed.")
                             connect(device)
                         }
                     } else {
@@ -77,17 +83,53 @@ class MainActivity : AppCompatActivity() {
         try {
             // log("PORT: $port")
             port.open(usbManager)
-            log("Connected to: " + port.serialNumber)
+            log("Connected to: Device ID " + port.serialNumber)
 
-            val outString = editTextInput.text
-            log(">>> $outString")
-            val written = port.writeString("$outString\r\n", 2000)
-            log("WRITTEN: $written")
+            var text = editTextInput.text.toString()
+            if (text.isEmpty()) {
+                val idStr = editTextSessionId.text.toString()
+                val id = idStr.toIntOrNull()
+                if (id == null) {
+                    log("ERROR: Invalid id")
+                } else {
+                    log("CONFIGURING: for id $id")
+                    val config = AxConfig(port)
 
-            val lines = port.readLines(200, false)
-            log("READ: ${lines.size}")
-            for (line in lines) {
-                log("<<< $line")
+                    val now = Calendar.getInstance()
+                    val start = now.clone() as Calendar
+                    val end = start.clone() as Calendar
+                    end.add(Calendar.HOUR, 7 * 24);
+
+                    log("...session id")
+                    config.setSessionId(id)
+                    log("...start time")
+                    config.setStartTime(start.time)
+                    log("...end time")
+                    config.setEndTime(end.time)
+                    log("...sample rate")
+                    config.setRate(100, 8)
+                    log("...time")
+                    config.setTime(now.time)
+                    log("...commit")
+                    config.commit()
+                    log("...led")
+                    config.setLed(5)    // magenta
+
+                    log("Done")
+                }
+            } else {
+                text += "\r\n"
+
+                log("SEND: $text")
+
+                val written = port.writeString(text, 2000)
+                log("WRITTEN: $written")
+
+                val lines = port.readLines(2000, 250, null)
+                log("READ: ${lines.size}")
+                for (line in lines) {
+                    log("<<< $line")
+                }
             }
         } catch (e: IOException) {
             // Deal with error.
@@ -98,7 +140,6 @@ class MainActivity : AppCompatActivity() {
         } finally {
             log("Closing...")
             port.close()
-//connection.close()
             log("Closed")
         }
     }
@@ -109,24 +150,39 @@ class MainActivity : AppCompatActivity() {
         setContentView(R.layout.activity_main)
         log("Started.")
 
+        if (!this.applicationContext.packageManager.hasSystemFeature(FEATURE_USB_HOST))
+            log("WARNING: This system is not a USB host")
+
         permissionIntent = PendingIntent.getBroadcast(this, 0, Intent(ACTION_USB_PERMISSION), 0)
         val filter = IntentFilter(ACTION_USB_PERMISSION)
         registerReceiver(usbReceiver, filter)
 
         usbManager = getSystemService(Context.USB_SERVICE) as UsbManager
 
-        // button is the Button id
+        editTextInput.setOnEditorActionListener { _, actionId, _ ->
+            return@setOnEditorActionListener when (actionId) {
+                EditorInfo.IME_ACTION_SEND -> {
+                    buttonSend.performClick()
+                    true
+                }
+                else -> false
+            }
+        }
+
         buttonSend.setOnClickListener {
-            val text = editTextInput.text
-            log("SEND: $text")
             var usbDevices = UsbSerialPort.getDevices(usbManager);
             // Find device from attached devices
             log("(${usbDevices.size} devices)")
-            if (usbDevices.size > 0) {
+            if (usbDevices.isNotEmpty()) {
                 var usbDevice = usbDevices[0];
                 // log("DEVICE: ${usbDevice.manufacturerName} // ${usbDevice.productName} // ${usbDevice.serialNumber}")
-                log("DEVICE: Requesting permission...")
+                if (!usbManager.hasPermission(usbDevice)) {
+                    log("DEVICE: Requesting permission...")
+                }
+                // request anyway so the code path is the same
                 usbManager.requestPermission(usbDevice, permissionIntent)
+            } else {
+                log("DEVICE: No devices.")
             }
             log("---")
         }

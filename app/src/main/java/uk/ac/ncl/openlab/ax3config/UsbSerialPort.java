@@ -160,9 +160,24 @@ public class UsbSerialPort {
         }
     }
 
+    @Override
+    public void finalize() {
+        close();
+    }
+
     // USB device serial number
-    public String getSerialNumber() {
-        return connection.getSerial();
+    public int getSerialNumber() {
+        String serial = connection.getSerial().trim();
+        if (!serial.startsWith("AX") && !serial.startsWith("CWA"))
+            return -1;
+        for (int i = serial.length() - 1; ; i--) {
+            if (i < 0 || !Character.isDigit(serial.charAt(i))) {
+                if (i + 1 >= serial.length()) {
+                    return -1;
+                }
+                return Integer.parseInt(serial.substring(i + 1));
+            }
+        }
     }
 
     // Read bytes
@@ -187,9 +202,9 @@ public class UsbSerialPort {
                     System.arraycopy(readBuffer, 0, buffer, offset, numRead);
                 }
             }
-            if (numRead <= 0) { break; }
+            if (numRead < 0) { break; } // time-out
             offset += numRead;
-            if (single) {
+            if (single && numRead != 0) {
                 break;
             }
         }
@@ -219,13 +234,16 @@ public class UsbSerialPort {
         return offset;
     }
 
-    // Read line (note: any partially-written line is lost, but should only happen if device outgoing buffer was full)
+    // Read line, up to one beginning with a final prefix, or timeouts
     StringBuilder sb = new StringBuilder();
-    public String[] readLines(int timeoutMS, boolean single) {
+    public String[] readLines(int initialTimeoutMs, int continuationTimeoutMs, String finalPrefix) {
+        boolean endNow = false;
+        boolean probableEnd = false;
         byte[] buffer = new byte[64];
         List<String> lines = new ArrayList<String>();
         for (;;) {
-            int count = read(buffer, timeoutMS, single); // blocking wait for next read (or timeout)
+            if (endNow) break;
+            int count = read(buffer, probableEnd ? continuationTimeoutMs : initialTimeoutMs, true); // blocking wait for next read (or timeout)
             // parse as characters, line-by-line
             for (int i = 0; i < count; i++) {
                 char c = (char) buffer[i];
@@ -233,18 +251,29 @@ public class UsbSerialPort {
                     if (sb.length() > 0 && sb.charAt(sb.length() - 1) == '\r') {
                         sb.deleteCharAt(sb.length() - 1);
                     }
-                    lines.add(sb.toString());
+                    String newLine = sb.toString();
+                    lines.add(newLine);
                     sb.delete(0, sb.length());
+                    if (finalPrefix != null && newLine.startsWith(finalPrefix)) {
+                        endNow = true;  // but continue processing bytes
+                    }
                 } else {
                     sb.append(c);
                 }
             }
-            // return if last read was partial
-            if (count < buffer.length) { break; }
+            // if last read was partial...
+            if (count < buffer.length) {
+                if (count == 0 || probableEnd) break;
+
+                // if was also at the end of a string, probably the end
+                if (sb.length() == 0) probableEnd = true;
+                else probableEnd = false;
+            }
         }
         return lines.toArray(new String[0]);
     }
 
+/*
     // Read string
     public String readString(int numBytes, int timeoutMS) {
         byte[] buffer = new byte[numBytes];
@@ -256,7 +285,7 @@ public class UsbSerialPort {
         }
         return sb.toString();
     }
-
+*/
 
     // Write string
     public boolean writeString(String str, int timeoutMS) {
