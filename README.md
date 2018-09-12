@@ -45,7 +45,7 @@ try {
 
 **Battery Level:** Check the devices battery level (percent) `config.getBattery()` -- as an example, for 7-day recordings, it is recommended not to configure a device which has less than 80% battery.
 
-**Configuring:*** Configure the device:
+**Configuring:** Configure the device:
 ```java
 config.setSessionId(id);            // Set the session id (9 digits numeric)
 config.setStartTime(start);         // Start date (and time)
