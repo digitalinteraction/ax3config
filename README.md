@@ -4,6 +4,18 @@ Android AX3 Configuration Tool
 
 ## Application
 
+The top most text area shows a log of activity. 
+The upper of the two smaller boxes is for a numeric Session ID (up to 9 digits).
+The lower box is for a custom command direct to the device (and should not be normally used).
+On pressing *SEND*, any custom command will be sent to the device otherwise, if none is specified, the device will be configured. 
+The configuration will only proceed if the device has at least 80% battery. 
+You will be warned if there is an existing configuration that is being overwritten (normally, the configuration would be aborted if so). 
+The configuration will be for the specified Session ID, 100 Hz sample rate and +/-8g sensitivity, start time of now, end time of 7 days from now, and the sensor time will be synchronized to the current local time. 
+Once the device is configured, the LED will be lit as magenta to show completion. 
+
+
+## Use in your own application
+
 Should respond to the `android.hardware.usb.action.USB_DEVICE_ATTACHED` intent, and specify a filter:
 
 ```xml
