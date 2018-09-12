@@ -30,21 +30,56 @@ package uk.ac.ncl.openlab.ax3config;
 
 import java.io.IOException;
 import java.util.Date;
+import java.util.Locale;
+import java.util.Calendar;
 import java.text.SimpleDateFormat;
+import java.text.ParseException;
 
 public class AxConfig {
 
-    // Device connection
-    protected UsbSerialPort serialPort;
+    // AX3 date range is 2000-01-01T00:00:00 to 2063-12-31T23:59:59
+    private int MIN_YEAR = 2000;
+    private int MAX_YEAR = 2063;
+    private final String DATE_FORMAT = "yyyy/MM/dd','HH:mm:ss";
+    private final SimpleDateFormat dateFormat = new SimpleDateFormat(DATE_FORMAT, Locale.US);
 
-    protected final String DATE_FORMAT = "yyyy/MM/dd','HH:mm:ss";
+    // Device connection
+    private UsbSerialPort serialPort;
+
 
     // Construct against a device
     public AxConfig(UsbSerialPort serialPort) {
         this.serialPort = serialPort;
     }
 
-    protected String[] command(String command, String expectedPrefix) throws IOException {
+    private String dateToString(Date time, boolean clamp) {
+        String timeString;
+        Calendar cal = Calendar.getInstance();
+        cal.setTime(time);
+        if (clamp && cal.get(Calendar.YEAR) < MIN_YEAR) {
+            return "0";
+        } else if (clamp && cal.get(Calendar.YEAR) > MAX_YEAR) {
+            return "-1";
+        } else {
+            return dateFormat.format(time);
+        }
+    }
+
+    private Date stringToDate(String input) {
+        if (input.equals("0")) {
+            return new Date(Long.MIN_VALUE);
+        } else if (input.equals("-1")) {
+            return new Date(Long.MAX_VALUE);
+        } else {
+            try {
+                return dateFormat.parse(input);
+            } catch (ParseException e) {
+                return null;
+            }
+        }
+    }
+
+    private String[] command(String command, String expectedPrefix, boolean commaSeparated) throws IOException {
         if (!serialPort.writeString(command + "\r\n", 500)) {
             throw new IOException("Problem sending command");
         }
@@ -55,24 +90,95 @@ public class AxConfig {
         if (!lines[lines.length - 1].startsWith(expectedPrefix)) {
             throw new IOException("Expected response not received: " + lines[lines.length - 1] + " -- expecting: " + expectedPrefix);
         }
+
         String responseLine = lines[lines.length - 1].trim();
-        return responseLine.split("[\\:= ]");
+        for (int i = 0; i < responseLine.length(); i++) {
+            char c = responseLine.charAt(i);
+            if (c == ':' || c == ' ' || c == '=' || c == ',') {
+                String key = responseLine.substring(0, i);
+                String value = responseLine.substring(i + 1);
+                if (commaSeparated) {
+                    // Parsed comma/space separated values
+                    String[] parts = value.split("[, ]");
+                    String[] retParts = new String[1 + parts.length];
+                    retParts[0] = key;
+                    for (int j = 0; j < parts.length; j++) {
+                        retParts[1 + j] = parts[j];
+                    }
+                    return retParts;
+                } else {
+                    // Parsed name/value pair
+                    return new String[] { key, value };
+                }
+            }
+        }
+        // Unparsed: return string
+        return new String[] { responseLine };
     }
 
+
+
     public void setSessionId(int value) throws IOException {
-        command("SESSION " + value, "SESSION=" + value);
+        command("SESSION " + value, "SESSION=" + value, true);
+    }
+
+    public int getSessionId() throws IOException {
+        // "SESSION=<sessionId>"
+        String[] results = command("SESSION", "SESSION=", true);
+        if (results.length < 2) throw new IOException("Unexpected response");
+        try {
+            return (int)Long.parseLong(results[1], 10);
+        } catch (NumberFormatException e) { throw new IOException("Invalid response value"); }
     }
 
     public void setStartTime(Date startTime) throws IOException {
         // "HIBERNATE=2018/07/16,16:00:00"
-        String timeString = (new SimpleDateFormat(DATE_FORMAT)).format(startTime);
-        command("HIBERNATE " + timeString, "HIBERNATE=" + timeString);
+        String timeString = dateToString(startTime, true);
+        command("HIBERNATE " + timeString, "HIBERNATE=" + timeString, false);
+    }
+
+    public Date getStartTime() throws IOException {
+        // "HIBERNATE=2018/07/16,16:00:00"
+        String[] results = command("HIBERNATE", "HIBERNATE=", false);
+        if (results.length < 2) throw new IOException("Unexpected response");
+        try {
+            String timeString;
+            if (results.length > 2) {
+                timeString = results[1] + "," + results[2];
+            } else {
+                timeString = results[1];
+            }
+            Date value = stringToDate(timeString);
+            if (value == null) {
+                throw new IOException("Could not parse time " + timeString);
+            }
+            return value;
+        } catch (NumberFormatException e) { throw new IOException("Invalid response value"); }
     }
 
     public void setEndTime(Date endTime) throws IOException {
         // "STOP=2018/07/17,09:00:00""
-        String timeString = (new SimpleDateFormat(DATE_FORMAT)).format(endTime);
-        command("STOP " + timeString, "STOP=" + timeString);
+        String timeString = dateToString(endTime, true);
+        command("STOP " + timeString, "STOP=" + timeString, false);
+    }
+
+    public Date getEndTime() throws IOException {
+        // "STOP=2018/07/17,09:00:00""
+        String[] results = command("STOP", "STOP=", false);
+        if (results.length < 2) throw new IOException("Unexpected response");
+        try {
+            String timeString;
+            if (results.length > 2) {
+                timeString = results[1] + "," + results[2];
+            } else {
+                timeString = results[1];
+            }
+            Date value = stringToDate(timeString);
+            if (value == null) {
+                throw new IOException("Could not parse time " + timeString);
+            }
+            return value;
+        } catch (NumberFormatException e) { throw new IOException("Invalid response value"); }
     }
 
     public void setRate(int rate, int range) throws IOException {
@@ -103,33 +209,43 @@ public class AxConfig {
             default: throw new IOException("Invalid range");
         }
 
-        command("RATE " + value, "RATE=" + value + "," + rate);
+        command("RATE " + value, "RATE=" + value + "," + rate, true);
     }
 
     public void setTime(Date time) throws IOException {
         // "$TIME=2000/01/01,00:01:22"
-        String timeString = (new SimpleDateFormat(DATE_FORMAT)).format(time);
-        command("TIME " + timeString, "$TIME=" + timeString);
+        String timeString = dateToString(time, false);
+        command("TIME " + timeString, "$TIME=" + timeString, false);
     }
 
-    public void commit() throws IOException {
-        command("COMMIT", "COMMIT: Delayed activation.");
+    public void commit(boolean wipe) throws IOException {
+        // command("COMMIT", "COMMIT: Delayed activation.");
+        if (wipe) {
+            command("FORMAT WC", "FORMAT: Delayed activation.", false);
+        } else {
+            command("FORMAT QC", "FORMAT: Delayed activation.", false);
+        }
     }
 
     public void setLed(int value) throws IOException {
-        command("LED " + value, "LED=" + value);
+        command("LED " + value, "LED=" + value, true);
     }
 
-    /*
-        String cmd = "SESSION";
-        String[] results = command(cmd + " " + value, cmd + "=");
-        if (results.length < 2 || results[0] != cmd) throw new IOException("Unexpected response");
-        int setValue;
+    public int getBattery() throws IOException {
+        // "$BATT=<raw-ADC>,<millivolts>,mV,<percentage>,<charge-termination-flag>"
+        String[] results = command("SAMPLE 1", "$BATT=", true);
+        if (results.length < 5) throw new IOException("Unexpected response");
         try {
-            setValue = Integer.parseInt(results[1], 10);
+            return Integer.parseInt(results[4], 10);
         } catch (NumberFormatException e) { throw new IOException("Invalid response value"); }
-        if (setValue != value) { throw new IOException("Invalid response value"); }
-     */
+    }
+
+    public boolean hasConfiguration() throws IOException {
+        int sessionId = getSessionId();
+        Date startTime = getStartTime();
+        Date endTime = getEndTime();
+        return sessionId != 0 || endTime.getTime() > startTime.getTime();
+    }
 
     @Override
     public void finalize() {

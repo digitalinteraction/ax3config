@@ -41,6 +41,7 @@ import android.content.IntentFilter
 import android.hardware.usb.UsbDevice
 import android.view.inputmethod.EditorInfo
 import android.content.pm.PackageManager.FEATURE_USB_HOST
+import android.os.Build
 import java.util.Calendar
 
 
@@ -74,6 +75,24 @@ class MainActivity : AppCompatActivity() {
                     }
                 }
             }
+            if (UsbManager.ACTION_USB_DEVICE_DETACHED == intent.action) {
+                val device: UsbDevice? = intent.getParcelableExtra(UsbManager.EXTRA_DEVICE)
+                device?.apply {
+                    log("DEVICE: Detached")
+                }
+            }
+            if (UsbManager.ACTION_USB_DEVICE_ATTACHED == intent.action) {
+                val device: UsbDevice? = intent.getParcelableExtra(UsbManager.EXTRA_DEVICE)
+                log("DEVICE: Attached")
+                device?.apply {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                        log("DEVICE: Attached ${device.serialNumber}")
+                    } else {
+                        // Serial number not known until device is opened
+                        log("DEVICE: Attached")
+                    }
+                }
+            }
         }
     }
 
@@ -86,38 +105,52 @@ class MainActivity : AppCompatActivity() {
             log("Connected to: Device ID " + port.serialNumber)
 
             var text = editTextInput.text.toString()
-            if (text.isEmpty()) {
+            if (text.isEmpty()) {       // normal configuration (not a custom command)
                 val idStr = editTextSessionId.text.toString()
                 val id = idStr.toIntOrNull()
                 if (id == null) {
                     log("ERROR: Invalid id")
                 } else {
-                    log("CONFIGURING: for id $id")
                     val config = AxConfig(port)
 
-                    val now = Calendar.getInstance()
-                    val start = now.clone() as Calendar
-                    val end = start.clone() as Calendar
-                    end.add(Calendar.HOUR, 7 * 24);
+                    log("CHECKING CONFIGURATION...")
 
-                    log("...session id")
-                    config.setSessionId(id)
-                    log("...start time")
-                    config.setStartTime(start.time)
-                    log("...end time")
-                    config.setEndTime(end.time)
-                    log("...sample rate")
-                    config.setRate(100, 8)
-                    log("...time")
-                    config.setTime(now.time)
-                    log("...commit")
-                    config.commit()
-                    log("...led")
-                    config.setLed(5)    // magenta
+                    // val existingSid = config.sessionId
+                    // log("EXISTING: sid=$existingSid")
+                    // val existingStart = config.startTime
+                    // log("EXISTING: start=$existingStart")
+                    // val existingEnd = config.endTime
+                    // log("EXISTING: end=$existingEnd")
 
-                    log("Done")
+                    if (config.hasConfiguration()) {
+                        log("WARNING: Device has an existing configuration -- overwriting anyway (would not normally do this!)...")
+                    }
+
+                    log("CHECKING BATTERY....")
+                    var battery = config.battery
+                    if (battery < 80) {
+                        log("ERROR: Device battery below minimum required.")
+                    }
+                    else {
+                        log("CONFIGURING: for id $id")
+
+                        val now = Calendar.getInstance()
+                        val start = now.clone() as Calendar
+                        val end = start.clone() as Calendar
+                        end.add(Calendar.HOUR, 7 * 24);
+
+                        config.setSessionId(id)
+                        config.setStartTime(start.time)
+                        config.setEndTime(end.time)
+                        config.setRate(100, 8)
+                        config.setTime(now.time)
+                        config.commit(false)
+                        config.setLed(5)    // magenta
+                        log("DONE");
+                    }
                 }
             } else {
+                // Custom command to device
                 text += "\r\n"
 
                 log("SEND: $text")
