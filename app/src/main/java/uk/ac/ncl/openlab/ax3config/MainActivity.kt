@@ -44,11 +44,7 @@ import android.content.pm.PackageManager.FEATURE_USB_HOST
 import android.os.Build
 import java.util.Calendar
 
-
 private const val ACTION_USB_PERMISSION = "com.android.example.USB_PERMISSION"
-
-
-// TODO: Config on an IntentService
 
 class MainActivity : AppCompatActivity() {
 
@@ -127,9 +123,10 @@ class MainActivity : AppCompatActivity() {
                     }
 
                     log("CHECKING BATTERY....")
+                    val minimumBattery = 80
                     var battery = config.battery
-                    if (battery < 80) {
-                        log("ERROR: Device battery below minimum required.")
+                    if (battery < minimumBattery) {
+                        log("ERROR: Device battery ($battery%) below minimum required ($minimumBattery%)")
                     }
                     else {
                         log("CONFIGURING: for id $id")
@@ -167,6 +164,7 @@ class MainActivity : AppCompatActivity() {
         } catch (e: IOException) {
             // Deal with error.
             log("IO EXCEPTION: ${e.message}")
+            log("OPEN DEBUG LOG: ${port.debugInfo}");
         } catch (e: Exception) {
             // Deal with error.
             log("EXCEPTION: ${e.message}")

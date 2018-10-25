@@ -67,3 +67,7 @@ config.setTime(now.time);           // Sync. the time with local device
 config.commit(false);               // Commit the settings
 config.setLed(5);                   // Set the LED to indicate completion (5=Magenta)
 ```
+
+---
+
+Manual install of a test `.apk`, either from the pre-build demo in `demo`, or `app/build/outputs/apk/debug`: `adb push app-debug.apk /data/local/tmp && adb shell pm install -t /data/local/tmp/app-debug.apk`
