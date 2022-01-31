@@ -1,6 +1,9 @@
 # AX3-Config
 
-Android AX3 Configuration Tool
+Android AX3 Configuration example code.
+
+**IMPORTANT:** On some phones/tablets, the CDC device is taken by a standard serial driver (e.g. /dev/ttyACM*), and yet access to serial devices appears to be completely forbidden to all applications (via a Security-Enhanced Linux configuration). If your particular device is affected, you may be able to get around this limitation with [an experimental AX3 device firmware](https://github.com/digitalinteraction/openmovement-axconfig/blob/master/README.md#how-it-communicates) which supports an additional "generic" interface for device communication (which does not appear to be a serial CDC device) but you would need to modify this example code to detect and use that interface.
+
 
 ## Requirements
 
