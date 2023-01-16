@@ -9,8 +9,7 @@ Android AX3 Configuration example code.
 
 Android USB devices are normally the USB *device* that the *host* connects to. 
 Most recent Android devices support "USB On-the-Go", where they can become the USB host. 
-You will typically need to connect a USB male C or micro-USB male A on-the-go adapter to a standard USB female A socket. 
-Then connect a standard USB A male to micro-USB B male connector to connect to an AX3.
+You will typically need to connect a USB male C or micro-USB male A on-the-go adapter to a standard USB female A socket, then connect a standard USB A male to micro-USB B male connector to connect to an AX3.
 You can also get cables that do this in one go.
 
 
